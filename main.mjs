@@ -1,18 +1,13 @@
 import { once } from "events";
-import { Redis } from "ioredis";
+import IORedis from "ioredis"
 import fastify from "fastify";
 
 const HOST = process.env.HOST ?? "0.0.0.0";
 const PORT = Number.parseInt(process.env.PORT ?? 3000);
 const PROM_PREFIX = process.env.PROM_PREFIX ?? "bull";
 const BULL_PREFIX = process.env.BULL_PREFIX ?? "bull";
-const REDIS_HOST = process.env.REDIS_HOST ?? "127.0.0.1";
-const REDIS_PORT = Number.parseInt(process.env.REDIST_PORT ?? 6379);
 const REDIS_DB = process.env.REDIS_DB ?? "0:default";
-const REDIS_USERNAME = process.env.REDIS_USERNAME;
-const REDIS_PASSWORD = process.env.REDIS_PASSWORD;
-const REDIS_CA = process.env.REDIS_CA;
-
+const REDIS_URI = process.env.REDIS_URI ?? "redis://127.0.0.1:6379"
 const app = fastify({ logger: true });
 
 const databases = REDIS_DB.split(",").map((val) => val.split(":"));
@@ -27,15 +22,7 @@ const descriptions = {
   [`${PROM_PREFIX}_completed_total`]: "Number of completed jobs",
 };
 
-const redis = new Redis({
-  host: REDIS_HOST,
-  port: REDIS_PORT,
-  username: REDIS_USERNAME,
-  password: REDIS_PASSWORD,
-  maxRetriesPerRequest: null,
-  offlineQueue: false,
-  tls: REDIS_CA ? { ca: Buffer.from(REDIS_CA, "base64"), rejectUnauthorized: true } : undefined
-});
+const redis = new IORedis(REDIS_URI, { maxRetriesPerRequest: null });
 
 app.get("/health", (_, res) => {
   res.code(redis.status === "ready" ? 200 : 503).send();
@@ -47,19 +34,17 @@ app.get("/metrics", async (_, res) => {
   for (const [index, db] of databases) {
     await redis.select(index);
 
-    let cursor = "0";
-    const queues = [];
-
-    do {
-      const [next, elements] = await redis.scan(cursor, "MATCH", `${BULL_PREFIX}:*:meta`);
-      queues.push(...elements);
-      cursor = next;
-    } while (cursor !== "0");
-
+    const names = [
+      "overall-stats-syncer",
+      "google-worker",
+      "overall",
+      "finalizer-worker",
+      "daily",
+      "daily-stats-syncer",
+    ];
     const multi = redis.multi();
 
-    queues.forEach((queue) => {
-      const [, name] = queue.split(":");
+    names.forEach((name) => {
       multi.llen(`${BULL_PREFIX}:${name}:active`);
       multi.llen(`${BULL_PREFIX}:${name}:wait`);
       multi.zcard(`${BULL_PREFIX}:${name}:waiting-children`);
@@ -74,7 +59,7 @@ app.get("/metrics", async (_, res) => {
     const offset = 7;
 
     for (let i = 0; i < results.length / offset; i++) {
-      const queue = queues[i].split(":").slice(1, -1).join(":");
+      const name = names[i];
 
       const [
         [, active_total],
@@ -100,7 +85,7 @@ app.get("/metrics", async (_, res) => {
         const value = data[metric];
         metrics[metric] ??= {};
         metrics[metric][db] ??= {};
-        metrics[metric][db][queue] ??= value;
+        metrics[metric][db][name] ??= value;
       }
     }
   }

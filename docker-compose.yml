@@ -15,8 +15,7 @@ services:
     environment:
       HOST: "::"
       PORT: 3000
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_URI: redis://redis:6379
       PROM_PREFIX: bull
       BULL_PREFIX: bull
     ports:
