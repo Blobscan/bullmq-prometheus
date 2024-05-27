@@ -20,4 +20,4 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           push: true
-          tags: igrek8/bullmq-prometheus:latest
+          tags: blossomlabs/bullmq-prometheus:latest
