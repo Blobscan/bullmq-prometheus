@@ -35,12 +35,15 @@ app.get("/metrics", async (_, res) => {
     await redis.select(index);
 
     const names = [
-      "overall-stats-syncer",
+      "google",
       "google-worker",
+      "swarm",
+      "swarm-worker",
       "overall",
-      "finalizer-worker",
+      "overall-stats-syncer",
       "daily",
       "daily-stats-syncer",
+      "finalizer-worker",
     ];
     const multi = redis.multi();
 
